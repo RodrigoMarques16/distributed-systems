@@ -5,10 +5,8 @@ set(CMAKE_CXX_FLAGS "-std=c++20")
 
 find_package(Threads REQUIRED)
 
-###################
-# GRPC
-
-message(STATUS "Using gRPC via add_subdirectory (FetchContent).")
+## GRPC
+# Automatically fetch grpc from github
 
 include(FetchContent)
 FetchContent_Declare(
@@ -30,12 +28,34 @@ else()
   set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:grpc_cpp_plugin>)
 endif()
 
-###################
+## Generate source files from proto file
+get_filename_component(proto "./protos/message.proto" ABSOLUTE)
+get_filename_component(proto_path "${proto}" PATH)
 
+set(out_dir "${CMAKE_SOURCE_DIR}/generated")
+set(proto_src "${out_dir}/message.pb.cpp")
+set(proto_hdr "${out_dir}/message.pb.hpp")
+set(grpc_src "${out_dir}/message.grpc.pb.cpp")
+set(grpc_hdr "${out_dir}/message.grpc.pb.hpp")
+
+add_custom_command(
+    OUTPUT "${proto_src}" "${proto_hdr}" "${grpc_src}" "${grpc_hdr}"
+    COMMAND ${_PROTOBUF_PROTOC}
+    ARGS --grpc_out "${out_dir}"
+      --cpp_out "${out_dir}"
+      -I "${proto_path}"
+      --plugin=protoc-gen-grpc="${_GRPC_CPP_PLUGIN_EXECUTABLE}"
+      "${proto}"
+    DEPENDS ${_GRPC_CPP_PLUGIN_EXECUTABLE})
+
+    add_custom_target(protos DEPENDS "${proto_src}" "${grpc_src}")
+
+# Include directories
+include_directories(generated)
 include_directories(lib)
 include_directories(include)
 
 add_subdirectory(src)
 
-ADD_CUSTOM_TARGET(my_target)
-ADD_DEPENDENCIES(my_target client broker server)
+add_custom_target(my_target)
+add_dependencies(my_target client broker server)

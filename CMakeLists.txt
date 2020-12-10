@@ -33,10 +33,10 @@ get_filename_component(proto "./protos/message.proto" ABSOLUTE)
 get_filename_component(proto_path "${proto}" PATH)
 
 set(out_dir "${CMAKE_SOURCE_DIR}/generated")
-set(proto_src "${out_dir}/message.pb.cpp")
-set(proto_hdr "${out_dir}/message.pb.hpp")
-set(grpc_src "${out_dir}/message.grpc.pb.cpp")
-set(grpc_hdr "${out_dir}/message.grpc.pb.hpp")
+set(proto_src "${out_dir}/message.pb.cc")
+set(proto_hdr "${out_dir}/message.pb.h")
+set(grpc_src "${out_dir}/message.grpc.pb.cc")
+set(grpc_hdr "${out_dir}/message.grpc.pb.h")
 
 add_custom_command(
     OUTPUT "${proto_src}" "${proto_hdr}" "${grpc_src}" "${grpc_hdr}"
@@ -45,8 +45,7 @@ add_custom_command(
       --cpp_out "${out_dir}"
       -I "${proto_path}"
       --plugin=protoc-gen-grpc="${_GRPC_CPP_PLUGIN_EXECUTABLE}"
-      "${proto}"
-    DEPENDS ${_GRPC_CPP_PLUGIN_EXECUTABLE})
+      "${proto}")
 
     add_custom_target(protos DEPENDS "${proto_src}" "${grpc_src}")
 

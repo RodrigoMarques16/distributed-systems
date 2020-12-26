@@ -57,4 +57,4 @@ include_directories(include)
 add_subdirectory(src)
 
 add_custom_target(my_target)
-add_dependencies(my_target client broker server)
+add_dependencies(my_target broker publisher subscriber)

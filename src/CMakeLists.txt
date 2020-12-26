@@ -1,3 +1,3 @@
-add_subdirectory(client)
 add_subdirectory(broker)
-add_subdirectory(server)
+add_subdirectory(publisher)
+add_subdirectory(subscriber)

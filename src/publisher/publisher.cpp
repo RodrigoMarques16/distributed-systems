@@ -61,7 +61,7 @@ struct Generator {
     }
 };
 
-struct BrokerClient {
+struct PublisherClient {
     using Writer = std::unique_ptr<ClientWriter<Message>>;
 
     size_t message_id = 0;
@@ -72,7 +72,7 @@ struct BrokerClient {
 
     Writer writer;
 
-    BrokerClient(tag_t t, int f, std::shared_ptr<Channel> channel) 
+    PublisherClient(tag_t t, int f, std::shared_ptr<Channel> channel) 
         : tag(t)
         , stub(Broker::NewStub(channel))
         , gen(Generator(f)) {}
@@ -147,7 +147,7 @@ int main(int argc, char** argv) {
     auto freq = atoi(argv[2]);
     auto target = argv[3];
 
-    auto publisher = BrokerClient{tag, freq, grpc::CreateChannel(target, grpc::InsecureChannelCredentials())};
+    auto publisher = PublisherClient{tag, freq, grpc::CreateChannel(target, grpc::InsecureChannelCredentials())};
     auto reply = publisher.register_with_tag(tag);
     
     if (!reply.has_value()) {

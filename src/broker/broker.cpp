@@ -57,10 +57,20 @@ struct Subscriber {
 //     void clear_expired() {}
 // };
 
+
+constexpr std::string build_tags_reply_text() {
+    return std::accumulate(tags_to_str.begin(), tags_to_str.end(), "",
+        [](const std::string& a, const std::string& b) -> std::string { 
+            return a + (a.length() > 0 ? ", " : "") + b; 
+        });
+}
+
 class BrokerServiceImpl final : public Broker::Service {
     using vector_pub = std::vector<Publisher>;
     using vector_sub = std::vector<Subscriber>;
-    
+
+    constexpr std::string tags_reply_text = build_tags_reply_text();
+
     std::array<vector_pub, 4> publisher_registry;  // not thread-safe
     std::array<vector_sub, 4> subscriber_registry; // not thread-safe
     // MessageDB db(10);   // todo: add constructor
@@ -73,6 +83,7 @@ class BrokerServiceImpl final : public Broker::Service {
         reply->set_id(id);
         return Status::OK;
     }
+
     Status Publish(ServerContext* context, ServerReader<Message>* reader, SuccessReply* reply) override {
         Message message;
         while(reader->Read(&message)){
@@ -88,6 +99,12 @@ class BrokerServiceImpl final : public Broker::Service {
         std::cout << "End of stream" << std::endl;
         return Status::OK;        
     }
+
+    Status RequestTags(ServerContext* context, const TagsRequest* request, TagsReply* reply) override {
+        reply->set_list(tags_reply_text);
+        return Status::OK;
+    }
+
 };
 
 int main(int argc, char** argv) {

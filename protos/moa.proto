@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package moa; // message oriented architecture
+
+enum tag_t {
+  TRIAL   = 0; // a potential customer just downloaded a trial version of the software
+  LICENSE = 1; // a customer just purchased a software license
+  SUPPORT = 2; // a customer using your software requested support
+  BUG     = 3; // a costumer just sent a bug report
+}
+
+service Broker {
+  // Publisher actions
+  rpc Register(RegisterRequest)   returns (RegisterReply) {}
+  rpc Publish(stream Message)     returns (SuccessReply)  {}
+  
+  // Subscriber actions
+  rpc Subscribe(SubscribeRequest) returns (stream Message)   {}
+  rpc RequestTags(TagsRequest)    returns (TagsReply)     {}
+}
+
+message RegisterRequest {
+  tag_t tag = 1; 
+}
+
+message RegisterReply {
+  int32 id = 1;
+}
+
+message SubscribeRequest {
+  int32 tag = 1; 
+}
+
+message SuccessReply {
+  bool success = 1;
+}
+
+message SubscribeReply {
+  int32 tags = 1;
+}
+
+message TagsRequest { /* empty */ }
+
+message TagsReply {
+  string list = 1;
+}
+
+message Message {
+  tag_t  tag       = 1;
+  int32  id        = 2;
+  int64  timestamp = 3;
+  string msg       = 4;
+}

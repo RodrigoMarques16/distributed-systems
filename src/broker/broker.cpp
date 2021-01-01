@@ -11,6 +11,7 @@
 #include <array>
 #include <unordered_map>
 #include <mutex>
+#include <numeric>
 
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/health_check_service_interface.h>
@@ -26,9 +27,13 @@ using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::Status;
 using grpc::ServerReader;
+using grpc::ServerWriter;
 using moa::RegisterRequest;
 using moa::RegisterReply;
 using moa::SuccessReply;
+using moa::TagsRequest;
+using moa::TagsReply;
+using moa::SubscribeRequest;
 using moa::Message;
 using moa::Broker;
 using moa::tag_t;
@@ -58,22 +63,22 @@ struct Subscriber {
 // };
 
 
-constexpr std::string build_tags_reply_text() {
-    return std::accumulate(tags_to_str.begin(), tags_to_str.end(), "",
-        [](const std::string& a, const std::string& b) -> std::string { 
-            return a + (a.length() > 0 ? ", " : "") + b; 
-        });
-}
-
-class BrokerServiceImpl final : public Broker::Service {
+struct BrokerServiceImpl final : public Broker::Service {
     using vector_pub = std::vector<Publisher>;
     using vector_sub = std::vector<Subscriber>;
 
-    constexpr std::string tags_reply_text = build_tags_reply_text();
+    std::string tags_reply_text;
 
     std::array<vector_pub, 4> publisher_registry;  // not thread-safe
     std::array<vector_sub, 4> subscriber_registry; // not thread-safe
     // MessageDB db(10);   // todo: add constructor
+
+    void build_tags_reply_text() {
+        tags_reply_text = std::accumulate(tag_to_str.begin(), tag_to_str.end(), std::string(),
+            [](const std::string& a, const std::string& b) -> std::string { 
+                return a + (a.length() > 0 ? ", " : "") + b; 
+            });
+    }
 
     Status Register(ServerContext* context, const RegisterRequest* request, RegisterReply* reply) override {
         auto tag = request->tag();
@@ -87,12 +92,7 @@ class BrokerServiceImpl final : public Broker::Service {
     Status Publish(ServerContext* context, ServerReader<Message>* reader, SuccessReply* reply) override {
         Message message;
         while(reader->Read(&message)){
-            std::cout << "Received message: \n"
-                      << message.tag() << "\n"
-                      << tag_to_str[message.tag()] << "\n"
-                      << message.timestamp() << "\n"
-                      << message.msg() << std::endl;
-        
+            print_message(message);
             // todo: redirection
         }
 
@@ -101,7 +101,18 @@ class BrokerServiceImpl final : public Broker::Service {
     }
 
     Status RequestTags(ServerContext* context, const TagsRequest* request, TagsReply* reply) override {
-        reply->set_list(tags_reply_text);
+        reply->set_list(std::string(tags_reply_text));
+        return Status::OK;
+    }
+
+    Status Subscribe(ServerContext* context, const SubscribeRequest* request, ServerWriter<Message>* writer) override {
+        Message message;
+        message.set_tag(tag_t::TRIAL);
+        message.set_id(-1);
+        message.set_timestamp(-1);
+        message.set_msg("Hello World");
+
+        writer->Write(message);
         return Status::OK;
     }
 
@@ -118,8 +129,10 @@ int main(int argc, char** argv) {
     builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
     builder.RegisterService(&service);
     
-    std::unique_ptr<Server> server(builder.BuildAndStart());
+    auto server = std::unique_ptr<Server>(builder.BuildAndStart());
     std::cout << "Server listening on " << server_address << std::endl;
+
+    service.build_tags_reply_text();
 
     server->Wait();
 

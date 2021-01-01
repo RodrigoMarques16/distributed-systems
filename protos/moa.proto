@@ -28,7 +28,7 @@ message RegisterReply {
 }
 
 message SubscribeRequest {
-  int32 tag = 1; 
+  string tag = 1; 
 }
 
 message SuccessReply {

@@ -70,8 +70,6 @@ struct PublisherClient {
     std::unique_ptr<Broker::Stub> stub;
     Generator gen;
 
-    Writer writer;
-
     PublisherClient(tag_t t, int f, std::shared_ptr<Channel> channel) 
         : tag(t)
         , stub(Broker::NewStub(channel))
@@ -83,7 +81,7 @@ struct PublisherClient {
 
         RegisterReply reply;
         ClientContext context;
-        Status status = stub->Register(&context, request, &reply);
+        auto status = stub->Register(&context, request, &reply);
 
         if (status.ok()) {
             return reply.id();
@@ -95,7 +93,7 @@ struct PublisherClient {
 
     Message generate_message() {
         using namespace std::chrono;
-        int64_t current_time = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+        auto current_time = system_clock::now().time_since_epoch().count();
 
         Message msg;
         msg.set_tag(tag); 
@@ -109,7 +107,7 @@ struct PublisherClient {
     void run() {
         ClientContext context;
         SuccessReply reply;
-        writer = Writer(stub->Publish(&context, &reply));
+        auto writer = Writer(stub->Publish(&context, &reply));
 
         while(true) {
             auto msg = generate_message();
@@ -125,7 +123,8 @@ struct PublisherClient {
         }
 
         writer->WritesDone();
-        Status status = writer->Finish();
+        
+        auto status = writer->Finish();
         if (status.ok())
             std::cout << "Finished publishing" << std::endl;
         else

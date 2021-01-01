@@ -2,6 +2,7 @@
 
 #include <array>
 #include <string>
+#include <sstream>
 #include <unordered_map>
 
 #include <moa.pb.h>
@@ -34,4 +35,23 @@ moa::tag_t parse_tag(const std::string& s) {
         exit(EXIT_FAILURE);
     } 
     return result->second;
+}
+
+// https://www.fluentcpp.com/2017/04/21/how-to-split-a-string-in-c/
+std::vector<std::string> split(const std::string& s, char delimiter) {
+   std::vector<std::string> tokens;
+   std::string token;
+   std::istringstream tokenStream(s);
+   while (std::getline(tokenStream, token, delimiter)) {
+      tokens.push_back(token);
+   }
+   return tokens;
+}
+
+inline void print_message(moa::Message message) {
+    std::cout << "Received message:\n"
+              << message.tag() << '\n'
+              << tag_to_str[message.tag()] << '\n'
+              << message.timestamp() << '\n'
+              << message.msg() << std::endl;
 }

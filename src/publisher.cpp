@@ -1,43 +1,32 @@
-/**
- * Publisher for a message oriented architecture
- *
- * Connects to the broker, registers itself as a provider of messages of a given
- * tag and continues to send messages to the broker
- * 
- * Takes message frequency as a parameter.
- */
+#include <grpcpp/ext/proto_server_reflection_plugin.h>
+#include <grpcpp/grpcpp.h>
+#include <grpcpp/health_check_service_interface.h>
 
-#include <string>
-#include <vector>
-#include <unordered_map>
-#include <optional>
-#include <random>
-#include <thread> 
-#include <chrono>
+#include <moa.grpc.pb.h>
+#include <moa.pb.h>
 
 #include <signal.h>
 #include <stdlib.h>
 #include <unistd.h>
 
-#include <grpcpp/grpcpp.h>
-#include <grpcpp/health_check_service_interface.h>
-#include <grpcpp/ext/proto_server_reflection_plugin.h>
+#include <chrono>
+#include <optional>
+#include <random>
+#include <string>
+#include <thread>
+#include <unordered_map>
+#include <vector>
 
-#include <moa.pb.h>
-#include <moa.grpc.pb.h>
-
-#include "../common.hpp"
+#include "common.hpp"
 
 using grpc::Channel;
 using grpc::ClientContext;
-using grpc::Status;
 using grpc::ClientWriter;
-using moa::RegisterRequest;
-using moa::RegisterReply;
+using grpc::Status;
 using moa::Broker;
-using moa::tag_t;
+using moa::Empty;
 using moa::Message;
-using moa::SuccessReply;
+using moa::RegisterRequest;
 
 // volatile sig_atomic_t stopFlag = 0;
 
@@ -51,8 +40,8 @@ struct Generator {
 
     Generator(double frequence) {
         std::random_device rd;
-        gen  = std::mt19937(rd());
-        dist = std::exponential_distribution<>(frequence / 3600.0);  
+        gen = std::mt19937(rd());
+        dist = std::exponential_distribution<>(frequence / 3600.0);
         std::cout << "Generating messages with a frequence of " << frequence << std::endl;
     }
 
@@ -66,28 +55,26 @@ struct PublisherClient {
 
     size_t message_id = 0;
 
-    tag_t tag;
+    std::string tag;
     std::unique_ptr<Broker::Stub> stub;
     Generator gen;
 
-    PublisherClient(tag_t t, int f, std::shared_ptr<Channel> channel) 
-        : tag(t)
-        , stub(Broker::NewStub(channel))
-        , gen(Generator(f)) {}
+    PublisherClient(std::string t, int f, std::shared_ptr<Channel> channel)
+        : tag(t), stub(Broker::NewStub(channel)), gen(Generator(f)) {}
 
-    std::optional<size_t> register_with_tag(const tag_t tag) {
+    bool register_with_tag(std::string tag) {
         RegisterRequest request;
         request.set_tag(tag);
 
-        RegisterReply reply;
+        Empty reply;
         ClientContext context;
         auto status = stub->Register(&context, request, &reply);
 
         if (status.ok()) {
-            return reply.id();
+            return true;
         } else {
             std::cout << status.error_code() << ": " << status.error_message() << std::endl;
-            return std::nullopt;
+            return false;
         }
     }
 
@@ -96,20 +83,20 @@ struct PublisherClient {
         auto current_time = system_clock::now().time_since_epoch().count();
 
         Message msg;
-        msg.set_tag(tag); 
         msg.set_id(message_id++);
         msg.set_timestamp(current_time);
-        msg.set_msg(message_texts[tag]);
+        msg.set_tag(tag);
+        msg.set_msg("example");
 
         return msg;
     }
 
     void run() {
         ClientContext context;
-        SuccessReply reply;
+        Empty reply;
         auto writer = Writer(stub->Publish(&context, &reply));
 
-        while(true) {
+        while (true) {
             auto msg = generate_message();
 
             if (!writer->Write(msg))
@@ -123,40 +110,38 @@ struct PublisherClient {
         }
 
         writer->WritesDone();
-        
+
         auto status = writer->Finish();
         if (status.ok())
             std::cout << "Finished publishing" << std::endl;
         else
             std::cout << "Exit failure" << std::endl;
     }
-
 };
 
-int main(int argc, char** argv) { 
+int main(int argc, char** argv) {
     if (argc != 4) {
-        std::cout << "Usage: publisher [tag] [frequence] [target]\n" 
-                  <<    "\ttag: [TRIAL|LICENSE|SUPPORT|BUG]\n"
-                  <<    "\tfrequence: How many messages to send per hour on average\n"
-                  <<    "\ttarget: Target ip address and port" << std::endl;
+        std::cout << "Usage: publisher [tag] [frequence] [target]\n"
+                  << "\ttag: [TRIAL|LICENSE|SUPPORT|BUG]\n"
+                  << "\tfrequence: How many messages to send per hour on average\n"
+                  << "\ttarget: Target ip address and port" << std::endl;
         return EXIT_FAILURE;
     }
 
-    auto tag = parse_tag(argv[1]);
+    auto tag = argv[1];
     auto freq = atoi(argv[2]);
     auto target = argv[3];
 
-    auto publisher = PublisherClient{tag, freq, grpc::CreateChannel(target, grpc::InsecureChannelCredentials())};
+    auto publisher = PublisherClient(tag, freq, grpc::CreateChannel(target, grpc::InsecureChannelCredentials()));
     auto reply = publisher.register_with_tag(tag);
-    
-    if (!reply.has_value()) {
+
+    if (!reply) {
         std::cout << "Failed to register with the broker" << std::endl;
         return EXIT_FAILURE;
     }
 
     std::cout << "Sucessfully registered with the broker\n"
-              << "My tag is: " << argv[1] << '\n'
-              << "My publisher id is: " << reply.value() << std::endl;
+              << "My tag is: " << argv[1] << std::endl;
 
     // signal(SIGINT, &handler);
 

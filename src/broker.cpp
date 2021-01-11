@@ -66,7 +66,7 @@ struct BrokerServiceImpl final : public Broker::Service {
 
     Status Register(ServerContext* context, const RegisterRequest* request, Empty* reply) override {
         auto tag = request->tag();
-        std::cout << "Registered publisher: "
+        std::cout << "\nRegistered publisher: "
                   << "uri=" << context->peer() 
                   << "tag=" << tag << std::endl;
         return Status::OK;
@@ -79,11 +79,10 @@ struct BrokerServiceImpl final : public Broker::Service {
             if (!tag.has_value())
                 return Status::CANCELLED;
 
-            auto subs = subscribers[*tag]; // copy
+            auto& subs = subscribers[*tag];
             auto& mutex = mutexes[*tag];
 
-            std::cout << "--------------------\n"
-                      << "Broadcasting to tag " << message.tag() << " | "
+            std::cout << "\nBroadcasting to tag " << message.tag() << " | "
                       << subs.size() << " subscribers\n"
                       << "publisher=" << context->peer() << "; "
                       << "messageid=" << message.id() << std::endl;
@@ -96,17 +95,16 @@ struct BrokerServiceImpl final : public Broker::Service {
             lk.unlock();
 
             db.write(*tag, message);
-            std::cout << "There are " << db.size(*tag) << " messages for this tag in the database\n"
-                      << "--------------------" << std::endl;
+            std::cout << "There are " << db.size(*tag) << " messages for this tag in the database\n" << std::endl;
         }
-        std::cout << "Publisher " << context->peer() << " disconnected" << std::endl;
+        std::cout << "\nPublisher " << context->peer() << " disconnected" << std::endl;
         return Status::OK;
     }
 
     // --- Subscriber implementations
 
     Status RequestTags(ServerContext* context, const Empty* request, TagsReply* reply) override {
-        std::cout << "Received request for tags from " << context->peer() << std::endl;
+        std::cout << "\nReceived request for tags from " << context->peer() << std::endl;
         reply->set_list(std::string(tags_reply_text));
         return Status::OK;
     }
@@ -146,7 +144,7 @@ struct BrokerServiceImpl final : public Broker::Service {
         while (context->IsCancelled() == false)
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-        std::cout << "Subscriber " << uri << " disconnected" << std::endl;
+        std::cout << "\nSubscriber " << uri << " disconnected" << std::endl;
 
         unregister_subscriber(*tag, uri);
 

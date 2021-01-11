@@ -1,5 +1,14 @@
 #pragma once
 
+/**
+ * Message database for the server
+ * 
+ * New messages are pushed to the end of the array so that 
+ * the array is sorted by timestamp. This way we can clear 
+ * the database by finding the last expired message and
+ * slicing the array.
+ */
+
 #include <vector>
 #include <mutex>
 
@@ -31,23 +40,16 @@ struct Database {
 
     void clear_expired(const tag_t tag) {
         auto it = db[tag].begin();
-        int count = 0;
-        while(has_expired(*it) && it != db[tag].end()) {
+        while(it != db[tag].end() && has_expired(*it))
             ++it;
-            ++count;
-        }
-        std::cout << count << " messages have expired" << std::endl;
         db[tag] = Container(it, db[tag].end());
     }
 
     inline bool has_expired(const T& msg) {
-        auto current_time = get_current_time();
-        std::cout << "|" << current_time << "-" << msg.timestamp() << "=" << current_time - msg.timestamp() <<  "|\n";
-        return current_time - msg.timestamp() >= TTL;
+        return get_current_time() - msg.timestamp() >= TTL;
     }
 
     inline size_t size(const tag_t tag) {
         return db[tag].size();
     }
-
 };

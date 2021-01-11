@@ -55,9 +55,6 @@ struct SubscriberClient {
     SubscriberClient(std::string t, std::shared_ptr<Channel> channel)
         : tag_(t), stub(Broker::NewStub(channel)) {}
 
-    /**
-     * Queries the server for a list of tags and picks one at random
-     */
     std::string pick_tag() {
         std::cout << "Requesting list of tags..." << std::endl;
 
@@ -75,9 +72,6 @@ struct SubscriberClient {
         return t;
     }
 
-    /**
-     * Receive messages until the server disconnects
-     */
     void run() {
         auto tag = tag_.value_or(pick_tag());
         

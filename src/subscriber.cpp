@@ -1,8 +1,13 @@
 /**
- * Subscriber for a message oriented architecture
+ * Subscriber client for a message oriented architecture
  *
- * Connects to the broker, asks for a list of message tags, subscribes to a
- * given tag and continues to receive messages with that tag sent by the broker
+ * Usage: subscriber [target] [tag]
+ * Where: 'tag' is a string denoting which type of messages to receive and is optional
+ *        'target' is the adress of the server
+ * 
+ * This client connects to the server and receives a stream of messages of a single type.
+ * If no tag is given then the server will be queried for a list of tags and one will be picked at random
+ * 
  */
 
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
@@ -15,6 +20,7 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <time.h>
 
 #include <optional>
 #include <random>
@@ -39,35 +45,38 @@ struct SubscriberClient {
     using Stub   = std::unique_ptr<Broker::Stub>;
 
     Stub stub;
+    std::optional<std::string> tag_ = std::nullopt;
+
+    SubscriberClient() {}
 
     SubscriberClient(std::shared_ptr<Channel> channel)
         : stub(Broker::NewStub(channel)) {}
 
+    SubscriberClient(std::string t, std::shared_ptr<Channel> channel)
+        : tag_(t), stub(Broker::NewStub(channel)) {}
+
     std::string pick_tag() {
-        std::cout << "Requesting list of tags" << std::endl;
+        std::cout << "Requesting list of tags..." << std::endl;
 
         ClientContext context;
         Empty request;
         TagsReply reply;
-
         stub->RequestTags(&context, request, &reply);
 
         std::cout << "List of tags received\n"
                   << reply.list() << std::endl;
 
         auto tags = split(reply.list(), ',');
-        auto tag = tags[rand() % tags.size()];
-
-        std::cout << "Chose tag: " << tag << std::endl;
-
-        return tag;
+        auto t = tags[rand() % tags.size()];
+        std::cout << "Chose tag: " << t << std::endl;
+        return t;
     }
 
     void run() {
-        auto tag = pick_tag();
-
+        auto tag = tag_.value_or(pick_tag());
+        
         std::cout << "Subscribing..." << std::endl;
-
+        
         ClientContext context;
         SubscribeRequest sub_request;
         sub_request.set_tag(tag);
@@ -92,15 +101,20 @@ struct SubscriberClient {
 };
 
 int main(int argc, char** argv) {
-    if (argc != 2) {
-        std::cout << "Usage: subscriber [target]\n"
-                  << "\ttarget: Target ip address and port" << std::endl;
+    if (argc != 2 && argc != 3) {
+        std::cout << "Usage: subscriber [target] [tag]\n"
+                  << "\ttarget: Target ip address and port" 
+                  << "\ttag: Optional tag" << std::endl;
         return EXIT_FAILURE;
     }
 
-    auto target = argv[1];
+    SubscriberClient subscriber;
+    std::string target, tag;
+    
+    if (argc == 2)
+        subscriber = SubscriberClient(grpc::CreateChannel(argv[1], grpc::InsecureChannelCredentials()));
+    else subscriber = SubscriberClient(argv[1], grpc::CreateChannel(argv[2], grpc::InsecureChannelCredentials()));
 
-    auto subscriber = SubscriberClient(grpc::CreateChannel(target, grpc::InsecureChannelCredentials()));
-
+    srand(time(0));
     subscriber.run();
 }

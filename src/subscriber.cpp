@@ -16,12 +16,10 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#include <chrono>
 #include <optional>
 #include <random>
 #include <string>
 #include <thread>
-#include <unordered_map>
 #include <vector>
 
 #include "common.hpp"
@@ -38,8 +36,9 @@ using moa::TagsReply;
 
 struct SubscriberClient {
     using Reader = std::unique_ptr<ClientReader<Message>>;
+    using Stub   = std::unique_ptr<Broker::Stub>
 
-    std::unique_ptr<Broker::Stub> stub;
+    Stub stub;
 
     SubscriberClient(std::shared_ptr<Channel> channel)
         : stub(Broker::NewStub(channel)) {}
@@ -79,14 +78,16 @@ struct SubscriberClient {
 
         Message message;
         while (reader->Read(&message)) {
+            std::cout << "--------------------\n"
+                      << "Received message:\n";
             print_message(message);
         }
 
         auto status = reader->Finish();
         if (status.ok())
-            std::cout << "ListFeatures rpc succeeded." << std::endl;
+            std::cout << "Finished receiving stream" << std::endl;
         else
-            std::cout << "ListFeatures rpc failed." << std::endl;
+            std::cout << "Server closed connection" << std::endl;
     }
 };
 

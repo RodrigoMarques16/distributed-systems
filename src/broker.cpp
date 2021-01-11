@@ -15,7 +15,7 @@
 #include <vector>
 
 #include "common.hpp"
-// #include "database.hpp"
+#include "database.hpp"
 
 using grpc::Server;
 using grpc::ServerBuilder;
@@ -29,7 +29,6 @@ using moa::Empty;
 using moa::Message;
 using moa::RegisterRequest;
 using moa::SubscribeRequest;
-using moa::tag_t;
 using moa::TagsReply;
 
 using Writer = ServerWriter<Message>;
@@ -51,9 +50,9 @@ struct BrokerServiceImpl final : public Broker::Service {
 
     std::string tags_reply_text;
 
-    // Database<Message> db;
+    Database<Message> db;
 
-    BrokerServiceImpl(int ttl) /* : db(ttl) */ {};
+    BrokerServiceImpl(long ttl) : db(ttl) {};
 
     void build_tags_reply_text() {
         tags_reply_text = std::accumulate(
@@ -63,10 +62,13 @@ struct BrokerServiceImpl final : public Broker::Service {
             });
     }
 
+    // --- Publisher implementations
+
     Status Register(ServerContext* context, const RegisterRequest* request, Empty* reply) override {
         auto tag = request->tag();
         std::cout << "Registered publisher: "
-                  << "uri=" << context->peer() << std::endl;
+                  << "uri=" << context->peer() 
+                  << "tag=" << tag << std::endl;
         return Status::OK;
     }
 
@@ -77,21 +79,31 @@ struct BrokerServiceImpl final : public Broker::Service {
             if (!tag.has_value())
                 return Status::CANCELLED;
 
-            std::cout << "Broadcasting to tag " << message.tag() << '\n'
-                      << subscribers[*tag].size() << " subscribers\n"
+            auto subs = subscribers[*tag]; // copy
+            auto& mutex = mutexes[*tag];
+
+            std::cout << "--------------------\n"
+                      << "Broadcasting to tag " << message.tag() << " | "
+                      << subs.size() << " subscribers\n"
                       << "publisher=" << context->peer() << "; "
                       << "messageid=" << message.id() << std::endl;
 
-            std::unique_lock lk(mutexes[*tag]);
-            for (auto& sub : subscribers[*tag]) {
-                std::cout << "Sending to " << sub.uri << '\n';
+            std::unique_lock lk(mutex);
+            for (auto& sub : subs) {
+                std::cout << "Sending to " << sub.uri << std::endl;
                 sub.writer->Write(message);
             }
             lk.unlock();
+
+            db.write(*tag, message);
+            std::cout << "There are " << db.size(*tag) << " messages for this tag in the database\n"
+                      << "--------------------" << std::endl;
         }
         std::cout << "Publisher " << context->peer() << " disconnected" << std::endl;
         return Status::OK;
     }
+
+    // --- Subscriber implementations
 
     Status RequestTags(ServerContext* context, const Empty* request, TagsReply* reply) override {
         std::cout << "Received request for tags from " << context->peer() << std::endl;
@@ -99,44 +111,58 @@ struct BrokerServiceImpl final : public Broker::Service {
         return Status::OK;
     }
 
+    Subscriber register_subscriber(tag_t tag, std::string id, Writer* writer) {
+        std::unique_lock lk(mutexes[tag]);
+        return subscribers[tag].emplace_back(tag, id, writer);
+    }
+
+    void unregister_subscriber(tag_t tag, std::string id) {
+        auto& subs = subscribers[tag];
+        std::unique_lock lk(mutexes[tag]);
+        subs.erase(std::remove_if(subs.begin(), subs.end(), 
+            [id](const auto& sub) { return sub.uri == id; }));
+    }
+
+    void send_message_history(tag_t tag, Writer* writer) {
+        auto old_messages = db.read(tag);
+        std::cout << "There are " << old_messages.size() << " unread messages" << std::endl;
+        for (auto& msg : old_messages)
+            writer->Write(msg);
+    }
+
     Status Subscribe(ServerContext* context, const SubscribeRequest* request, Writer* writer) override {
         auto tag = parse_tag(request->tag());
-        auto uri = context->peer();
-
         if (!tag.has_value())
             return Status::CANCELLED;
 
-        std::cout << "New subscriber: "
-                  << "tag=" << request->tag() << ", "
-                  << "uri=" << uri << std::endl;
-        
-        std::unique_lock lk(mutexes[*tag]);
-        subscribers[*tag].emplace_back(*tag, uri, writer);
-        lk.unlock();
+        auto uri = context->peer();
+        auto& subs = subscribers[*tag];
+        auto& mutex = mutexes[*tag];
 
-        // auto old_messages = db.read_all(*tag);
-        // for (auto& msg : old_messages)
-        //     writer->Write(msg);
+        register_subscriber(*tag, uri, writer);
+        send_message_history(*tag, writer);
 
-        while (context->IsCancelled() == false) {
+        // Loop until connection is closed
+        while (context->IsCancelled() == false)
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
 
         std::cout << "Subscriber " << uri << " disconnected" << std::endl;
 
-        lk.lock();
-        auto end = std::remove_if(subscribers[*tag].begin(), subscribers[*tag].end(),
-                                 [uri](const auto& sub) { return sub.uri == uri; });
-        subscribers[*tag].erase(end);
-        lk.unlock();
+        unregister_subscriber(*tag, uri);
 
         return Status::OK;
     }
 };
 
 int main(int argc, char** argv) {
+    if (argc != 2) {
+        std::cout << "Usage: subscriber [ttl]\n"
+                  << "\tttl: How long to keep messages stored for" << std::endl;
+        return EXIT_FAILURE;
+    }
+
     std::string server_address("0.0.0.0:50051");
-    BrokerServiceImpl service(10);
+    BrokerServiceImpl service((time_t) atoi(argv[1]));
 
     grpc::EnableDefaultHealthCheckService(true);
     grpc::reflection::InitProtoReflectionServerBuilderPlugin();

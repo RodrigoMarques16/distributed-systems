@@ -1,72 +1,53 @@
 #pragma once
 
-#include <deque>
+#include <vector>
 #include <mutex>
-#include <condition_variable>
 
-template<typename T>
-class ConcurrentVector {
-    using Container = std::vector<T>;
-    using Mutex     = std::mutex;
-    using Lock      = std::lock_guard<Mutex>;
-
-    Container vec;
-    Mutex mut;
-
-public:
-
-    ConcurrentVector() : vec(), mut() {}
-
-};
+#include "common.hpp"
 
 template<typename T>
 struct Database {
-    using namespace moa;
-    
     using Container = std::vector<T>;
-    using Lock      = std::lock_guard<std::mutex>;
 
     std::array<Container, 4> db;
     std::array<std::mutex, 4> mutexes;
-    std::array<std::condition_variable, 4> condition_vars;
-    std::array<bool, 4> notify = {false, false, false, false};
 
-    long TTL; // how long to keep data around for, in seconds
+    time_t TTL; // how long to keep data around for, in seconds
 
-    Database(int t) : TTL(t) {}
+    Database(time_t t) : TTL(t) {}
 
-    void write(const tag_t tag, const T& s) {o
-        {
-            Lock lk(mutexes[tag]);
-            db[tag].push_back(s);
-        }
-        condition_vars[tag].notify_all();
+    void write(const tag_t tag, const T& s) {
+        std::unique_lock lk(mutexes[tag]);
+        db[tag].push_back(s);
     }
 
-    T wait_for_new(const tag_t tag) {
-        conditional_vars[tag].wait();
-        return *(--db.end());
-    }
-
-    std::vector<T> read_all(const tag_t tag) {
-        Lock lk(mutexes[tag]);
+    Container read(const tag_t tag) {
         if (db[tag].empty()) 
             return {};
+        std::unique_lock lk(mutexes[tag]);
         clear_expired(tag);
-        return std::vector<T>(db[tag].begin(), db[tag].end());
+        return Container(db[tag].begin(), db[tag].end());
     }
 
     void clear_expired(const tag_t tag) {
         auto it = db[tag].begin();
-        while(has_expired(*it))
+        int count = 0;
+        while(has_expired(*it) && it != db[tag].end()) {
             ++it;
+            ++count;
+        }
+        std::cout << count << " messages have expired" << std::endl;
         db[tag] = Container(it, db[tag].end());
     }
 
     inline bool has_expired(const T& msg) {
-        using namespace std::chrono;
-        auto current_time = system_clock::now().time_since_epoch().count();
+        auto current_time = get_current_time();
+        std::cout << "|" << current_time << "-" << msg.timestamp() << "=" << current_time - msg.timestamp() <<  "|\n";
         return current_time - msg.timestamp() >= TTL;
+    }
+
+    inline size_t size(const tag_t tag) {
+        return db[tag].size();
     }
 
 };

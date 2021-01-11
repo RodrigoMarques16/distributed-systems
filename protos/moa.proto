@@ -2,13 +2,6 @@ syntax = "proto3";
 
 package moa; // message oriented architecture
 
-enum tag_t {
-  TRIAL   = 0;
-  LICENSE = 1;
-  SUPPORT = 2;
-  BUG     = 3;
-}
-
 service Broker {
   // Publisher actions
   rpc Register(RegisterRequest) returns (Empty) {}
@@ -19,11 +12,11 @@ service Broker {
   rpc RequestTags(Empty)          returns (TagsReply)      {}
 }
 
+message Empty {}
+
 message RegisterRequest {
   string tag = 1; 
 }
-
-message Empty {}
 
 message SubscribeRequest {
   string tag = 1; 

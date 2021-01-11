@@ -6,7 +6,7 @@
  *        'target' is the adress of the server
  * 
  * This client connects to the server and receives a stream of messages of a single type.
- * If no tag is given then the server will be queried for a list of tags and one will be picked at random
+ * If no tag is given then the server will be queried for a list of tags and one will be picked at random.
  * 
  */
 
@@ -55,6 +55,9 @@ struct SubscriberClient {
     SubscriberClient(std::string t, std::shared_ptr<Channel> channel)
         : tag_(t), stub(Broker::NewStub(channel)) {}
 
+    /**
+     * Queries the server for a list of tags and picks one at random
+     */
     std::string pick_tag() {
         std::cout << "Requesting list of tags..." << std::endl;
 
@@ -72,6 +75,9 @@ struct SubscriberClient {
         return t;
     }
 
+    /**
+     * Receive messages until the server disconnects
+     */
     void run() {
         auto tag = tag_.value_or(pick_tag());
         
@@ -88,8 +94,8 @@ struct SubscriberClient {
         Message message;
         while (reader->Read(&message)) {
             std::cout << "--------------------\n"
-                      << "Received message:\n";
-            print_message(message);
+                      << "Received message:\n"
+                      << message << std::endl;
         }
 
         auto status = reader->Finish();
@@ -108,13 +114,10 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
-    SubscriberClient subscriber;
-    std::string target, tag;
-    
-    if (argc == 2)
-        subscriber = SubscriberClient(grpc::CreateChannel(argv[1], grpc::InsecureChannelCredentials()));
-    else subscriber = SubscriberClient(argv[1], grpc::CreateChannel(argv[2], grpc::InsecureChannelCredentials()));
-
     srand(time(0));
-    subscriber.run();
+
+    if (argc == 2)
+        SubscriberClient(grpc::CreateChannel(argv[1], grpc::InsecureChannelCredentials())).run();
+    else 
+        SubscriberClient(argv[1], grpc::CreateChannel(argv[2], grpc::InsecureChannelCredentials())).run();
 }

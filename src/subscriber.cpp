@@ -36,7 +36,7 @@ using moa::TagsReply;
 
 struct SubscriberClient {
     using Reader = std::unique_ptr<ClientReader<Message>>;
-    using Stub   = std::unique_ptr<Broker::Stub>
+    using Stub   = std::unique_ptr<Broker::Stub>;
 
     Stub stub;
 

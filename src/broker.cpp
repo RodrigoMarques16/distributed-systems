@@ -67,7 +67,7 @@ struct BrokerServiceImpl final : public Broker::Service {
     Status Register(ServerContext* context, const RegisterRequest* request, Empty* reply) override {
         auto tag = request->tag();
         std::cout << "\nRegistered publisher: "
-                  << "uri=" << context->peer() 
+                  << "uri=" << context->peer() << "; "
                   << "tag=" << tag << std::endl;
         return Status::OK;
     }
@@ -154,7 +154,7 @@ struct BrokerServiceImpl final : public Broker::Service {
 
 int main(int argc, char** argv) {
     if (argc != 2) {
-        std::cout << "Usage: subscriber [ttl]\n"
+        std::cout << "Usage: broker [ttl]\n"
                   << "\tttl: How long to keep messages stored for" << std::endl;
         return EXIT_FAILURE;
     }

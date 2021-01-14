@@ -45,7 +45,7 @@ struct SubscriberClient {
     using Stub   = std::unique_ptr<Broker::Stub>;
 
     Stub stub;
-    std::optional<std::string> tag_ = std::nullopt;
+    std::string tag = "";
 
     SubscriberClient() {}
 
@@ -53,15 +53,22 @@ struct SubscriberClient {
         : stub(Broker::NewStub(channel)) {}
 
     SubscriberClient(std::string t, std::shared_ptr<Channel> channel)
-        : tag_(t), stub(Broker::NewStub(channel)) {}
+        : tag(t), stub(Broker::NewStub(channel)) {}
 
     std::string pick_tag() {
+        if (tag != "") return tag;
+
         std::cout << "Requesting list of tags..." << std::endl;
 
         ClientContext context;
         Empty request;
         TagsReply reply;
-        stub->RequestTags(&context, request, &reply);
+        auto status = stub->RequestTags(&context, request, &reply);
+
+        if (!status.ok()) {
+            std::cout << "Failed to connect to the server" << std::endl;    
+            exit(EXIT_FAILURE);
+        }
 
         std::cout << "List of tags received\n"
                   << reply.list() << std::endl;
@@ -73,7 +80,7 @@ struct SubscriberClient {
     }
 
     void run() {
-        auto tag = tag_.value_or(pick_tag());
+        tag = pick_tag();
         
         std::cout << "Subscribing..." << std::endl;
         
@@ -82,8 +89,6 @@ struct SubscriberClient {
         sub_request.set_tag(tag);
 
         auto reader = Reader(stub->Subscribe(&context, sub_request));
-
-        std::cout << "Receiving stream of messages" << std::endl;
 
         Message message;
         while (reader->Read(&message)) {
@@ -96,13 +101,13 @@ struct SubscriberClient {
         if (status.ok())
             std::cout << "Finished receiving stream" << std::endl;
         else
-            std::cout << "Server closed connection" << std::endl;
+            std::cout << "No connection to server" << std::endl;
     }
 };
 
 int main(int argc, char** argv) {
     if (argc != 2 && argc != 3) {
-        std::cout << "Usage: subscriber [target] [tag]\n"
+        std::cout << "Usage: subscriber [tag] [target]\n"
                   << "\ttarget: Target ip address and port" 
                   << "\ttag: Optional tag" << std::endl;
         return EXIT_FAILURE;

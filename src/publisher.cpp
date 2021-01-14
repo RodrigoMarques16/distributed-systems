@@ -138,7 +138,5 @@ int main(int argc, char** argv) {
     auto freq = atoi(argv[2]);
     auto target = argv[3];
 
-    auto publisher = PublisherClient(tag, (double)freq, grpc::CreateChannel(target, grpc::InsecureChannelCredentials()));
-
-    publisher.run();
+    PublisherClient(tag, (double)freq, grpc::CreateChannel(target, grpc::InsecureChannelCredentials())).run();
 }
